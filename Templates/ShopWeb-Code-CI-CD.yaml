@@ -1,0 +1,121 @@
+trigger: 
+  - master
+pool:
+  name: JnateshPool 
+variables: 
+  - template: './Pipelines/Variables/Global_Variables.yaml'
+
+#-- Stages --#
+stages:
+
+#-------------------#
+#-- BUILD-SECTION --#
+#-------------------#
+
+# This stage only runs on non master branch pipelines
+
+- stage: build_and_test
+  displayName: 'Build'
+  condition: eq( variables['Build.SourceBranch'], 'refs/heads/master' )
+
+  jobs:
+
+  #-- Build and Tests --#
+    - job: build_and_test
+
+    steps:
+    - template: './Pipelines/Templates/Build_And_Test.yaml'
+    parameters:
+      NetVersion: '5.0.x'
+      Projects: $(Projects)
+      TestsProjects: $(TestsProjects)
+      BuildConfiguration: $(BuildConfiguration)
+
+#---------------------#
+#-- PUBLISH-SECTION --#
+#---------------------#
+
+# This stage only runs on master branch pipelines
+
+- stage: build_and_publish
+  displayName: 'Publish'
+  condition: eq( variables['Build.SourceBranch'], 'refs/heads/master' )
+  jobs:
+  - job: build_artifact
+    steps:
+    - template: './Pipelines/Templates/Build_And_Test.yaml'
+    parameters:
+      NetVersion: '5.0.x'
+      Projects: $(Projects)
+      TestsProjects: $(TestsProjects)
+      BuildConfiguration: $(BuildConfiguration)
+
+  - task: DotNetCoreCLI@2
+    displayName: Publish
+    inputs:
+      command: publish
+      publishWebProjects: True
+      arguments: '--configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)'
+      zipAfterPublish: True
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifact'
+    inputs:
+      PathtoPublish: '$(build.artifactstagingdirectory)'
+    condition: succeededOrFailed()
+
+#---------------------#
+#-------- DEV --------#
+#---------------------#
+
+- stage: DEV
+  dependsOn: build_and_publish
+  condition: and(succeeded('build_and_publish'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
+
+
+  variables:
+    - template: './Pipelines/Variables/Dev_Variables.yaml'
+  
+  jobs:
+    - deployment: Deploy_to_Dev
+      displayName: 'Deploy-DEV'
+      workspace:
+        clean: all
+      environment: NONPROD
+      pool: JnateshPool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - template: './Pipelines/Templates/Deploy_To_Azure.yaml'
+              parameters:
+                AzureSubscription: '$(AzureSubscription)'
+                AppServiceName: '$(AppServiceName)'
+
+#---------------------#
+#-------- STG --------#
+#---------------------#
+
+- stage: STG
+  dependsOn: build_and_publish
+  condition: and(succeeded('build_and_publish'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
+
+
+  variables:
+    - template: './Pipelines/Variables/Stg_Variables.yaml'
+  
+  jobs:
+    - deployment: Deploy_to_stg
+      displayName: 'Deploy-STG'
+      workspace:
+        clean: all
+      environment: NONSTG
+      pool: JnateshPool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - template: './Pipelines/Templates/Deploy_To_Azure.yaml'
+              parameters:
+                AzureSubscription: '$(AzureSubscription)'
+                AppServiceName: '$(AppServiceName)'

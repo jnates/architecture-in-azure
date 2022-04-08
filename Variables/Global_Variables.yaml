@@ -1,0 +1,14 @@
+# Global Variables
+variables:
+- name: Projects
+  value: '**/*.csproj'
+- name:  TestsProjects
+  value: '**/*[Tt]ests/*.csproj'
+- name:  BuildConfiguration
+  value: 'Release'
+- name:  AppName
+  value: 'shopweb'
+- name:  Owner
+  value: 'jnatesh'
+- name: AzureSubscription
+  value: 'Development_Subscription (5e8bf4ee-e029-4c31-9623-efde72ddf410)'
