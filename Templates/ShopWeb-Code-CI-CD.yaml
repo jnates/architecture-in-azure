@@ -68,7 +68,7 @@ stages:
 #-------- DEV --------#
 #---------------------#
 
-- stage: DEV
+- stage: dev
   dependsOn: build_and_publish
   condition: and(succeeded('build_and_publish'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
 
@@ -96,7 +96,7 @@ stages:
 #-------- STG --------#
 #---------------------#
 
-- stage: STG
+- stage: stg
   dependsOn: build_and_publish
   condition: and(succeeded('build_and_publish'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
 
@@ -109,7 +109,88 @@ stages:
       displayName: 'Deploy-STG'
       workspace:
         clean: all
-      environment: NONSTG
+      environment: NONPROD
+      pool: JnateshPool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - template: './Pipelines/Templates/Deploy_To_Azure.yaml'
+              parameters:
+                AzureSubscription: '$(AzureSubscription)'
+                AppServiceName: '$(AppServiceName)'
+
+#---------------------#
+#-------- QAS --------#
+#---------------------#
+
+- stage: QAS
+  dependsOn: dev
+  condition: and(succeeded('dev'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
+
+  variables:
+    - template: './Pipelines/Variables/Qas_Variables.yaml'
+  
+  jobs:
+    - deployment: Deploy_to_qas
+      displayName: 'Deploy-QAS'
+      workspace:
+        clean: all
+      environment: NONPROD
+      pool: JnateshPool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - template: './Pipelines/Templates/Deploy_To_Azure.yaml'
+              parameters:
+                AzureSubscription: '$(AzureSubscription)'
+                AppServiceName: '$(AppServiceName)'
+
+#---------------------#
+#-------- UAT --------#
+#---------------------#
+
+- stage: UAT
+  dependsOn: uat
+  condition: and(succeeded('dev'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
+
+  variables:
+    - template: './Pipelines/Variables/Uat_Variables.yaml'
+  
+  jobs:
+    - deployment: Deploy_to_stg
+      displayName: 'Deploy-STG'
+      workspace:
+        clean: all
+      environment: NONPROD
+      pool: JnateshPool
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - template: './Pipelines/Templates/Deploy_To_Azure.yaml'
+              parameters:
+                AzureSubscription: '$(AzureSubscription)'
+                AppServiceName: '$(AppServiceName)'
+
+#---------------------#
+#-------- PROD -------#
+#---------------------#
+
+- stage: prd
+  dependsOn: qas
+  condition: and(succeeded('dev'), eq( variables['Build.SourceBranch'], 'refs/heads/master' ))
+
+  variables:
+    - template: './Pipelines/Variables/Prd_Variables.yaml'
+  
+  jobs:
+    - deployment: Deploy_to_prd
+      displayName: 'Deploy-PRD'
+      workspace:
+        clean: all
+      environment: PROD
       pool: JnateshPool
       strategy:
         runOnce:
